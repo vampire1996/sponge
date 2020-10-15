@@ -1,3 +1,4 @@
+
 #ifndef SPONGE_LIBSPONGE_TCP_RECEIVER_HH
 #define SPONGE_LIBSPONGE_TCP_RECEIVER_HH
 
@@ -19,13 +20,15 @@ class TCPReceiver {
 
     //! The maximum number of bytes we'll store.
     size_t _capacity;
-
+    WrappingInt32 isn;
+    bool syn_received;
+    bool fin_received;
   public:
     //! \brief Construct a TCP receiver
     //!
     //! \param capacity the maximum number of bytes that the receiver will
     //!                 store in its buffers at any give time.
-    TCPReceiver(const size_t capacity) : _reassembler(capacity), _capacity(capacity) {}
+    TCPReceiver(const size_t capacity) : _reassembler(capacity), _capacity(capacity),isn(0),syn_received(false),fin_received(false) {}
 
     //! \name Accessors to provide feedback to the remote TCPSender
     //!@{

@@ -8,7 +8,24 @@ using namespace std;
 
 void get_URL(const string &host, const string &path) {
     // Your code here.
-
+    TCPSocket socket;
+    Address address(host,"http");
+    socket.connect(address);
+    //send HTTP request
+    //soket is a tpye of file descriptor 
+    //TCPsocket is a tpye of socket
+    //so we can use write and read functions of file descriptor wsing tcp socket
+    socket.write("GET "+path+" HTTP/1.1\r\n");
+    socket.write("Host: "+host+"\r\n");
+    socket.write("\r\n");//ending HTTP request entity body is empty
+    socket.shutdown(SHUT_WR);
+    //print everything received
+    while(!socket.eof())
+    {
+	   cout<<socket.read();
+    }
+  //  cout<<str;
+    // socket.shutdown(SHUT_WR);
     // You will need to connect to the "http" service on
     // the computer whose name is in the "host" string,
     // then request the URL path given in the "path" string.

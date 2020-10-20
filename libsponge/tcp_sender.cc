@@ -100,7 +100,7 @@ void TCPSender::fill_window() {
 
 //! \param ackno The remote receiver's ackno (acknowledgment number)
 //! \param window_size The remote receiver's advertised window size
-void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_size) { 
+bool TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_size) { 
 
 	bool flag=false; //if new data acked,flag=true
         // if receiver says window_size is zero,set cur_window_size to 0 because
@@ -131,9 +131,13 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
 	// if all segments has been acked,close timer
 	if(_segments_not_ack.empty() && _stream.input_ended())
 	{
+           _fully_acked=true;  		
 	   timer_run=false;
 	}
 
+	// if acking something has not been sent return false 
+        if(unwrap(ackno,_isn,checkpoint)>_next_seqno)return false;
+        return true;	
 }
 
 //! \param[in] ms_since_last_tick the number of milliseconds since the last call to this method

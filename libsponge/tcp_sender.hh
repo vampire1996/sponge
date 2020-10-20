@@ -52,6 +52,7 @@ class TCPSender {
     size_t timer_ms{0};
     uint64_t checkpoint{0};
     uint64_t _bytes_in_flight{0};
+    bool _fully_acked{false};
   public:
     //! Initialize a TCPSender
     TCPSender(const size_t capacity = TCPConfig::DEFAULT_CAPACITY,
@@ -68,10 +69,12 @@ class TCPSender {
     //!@{
 
     //! \brief A new acknowledgment was received
-    void ack_received(const WrappingInt32 ackno, const uint16_t window_size);
+    bool ack_received(const WrappingInt32 ackno, const uint16_t window_size);
 
     //! \brief Generate an empty-payload segment (useful for creating empty ACK segments)
     void send_empty_segment();
+
+    bool &fully_acked() {return _fully_acked;}
 
     //! \brief create and send segments to fill as much of the window as possible
     void fill_window();

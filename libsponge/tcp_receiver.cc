@@ -10,7 +10,7 @@
 
 using namespace std;
 
-void TCPReceiver::segment_received(const TCPSegment &seg) {
+bool TCPReceiver::segment_received(const TCPSegment &seg) {
     bool eof=false;
     std::string data=""; 
     std::string_view sv=seg.payload().str();    
@@ -19,12 +19,14 @@ void TCPReceiver::segment_received(const TCPSegment &seg) {
     WrappingInt32 seq_number=seg.header().seqno;
     bool syn_flag=seg.header().syn;
     bool fin_flag=seg.header().fin;    
+    bool flag=false;
    // std::cout<<_capacity<<endl;
     // SYN  bytes_stream FIN
     // if ISN hasn't been set yet,a segment is acceptable if(and only if) it has the SYN bit set
-    if(!syn_received && !syn_flag) return;
+    if(!syn_received && !syn_flag) return false;
     if(syn_flag)
     {
+       flag=true;	    
        syn_received=true;	    
        isn=seq_number; 
        //isn+1 is because that isn is not wrote to byte stream
@@ -33,10 +35,14 @@ void TCPReceiver::segment_received(const TCPSegment &seg) {
     }	    
     else
     {
+       uint64_t n=_reassembler.stream_out().bytes_written();
        index=unwrap(seq_number,isn,checkpoint);
+       //if payload overlaps some part of the window,flag=true or the payload is empty-- an ack 
+       if(!(index-1>=n+window_size() || index-1+sv.length()<=n) ) flag=true;
     }
     if(fin_flag)
     {
+       flag=true;	    
        fin_received=true;	    
        eof=true;
        // if(sv.length()>0)sv=sv.substr(0,sv.length()-1);
@@ -45,6 +51,7 @@ void TCPReceiver::segment_received(const TCPSegment &seg) {
     for(uint64_t i=0;i<sv.length();i++) data+=sv[i];
    // cout<<data<<" "<<sv.length()<<endl;
     _reassembler.push_substring(data,index-1,eof);
+    return flag;
 }
 
 optional<WrappingInt32> TCPReceiver::ackno() const { 

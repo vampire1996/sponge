@@ -5,6 +5,7 @@
 #include "tcp_receiver.hh"
 #include "tcp_sender.hh"
 #include "tcp_state.hh"
+#include <limits>
 
 //! \brief A complete endpoint of a TCP connection
 class TCPConnection {
@@ -14,13 +15,24 @@ class TCPConnection {
     TCPSender _sender{_cfg.send_capacity, _cfg.rt_timeout, _cfg.fixed_isn};
 
     //! outbound queue of segments that the TCPConnection wants sent
-    std::queue<TCPSegment> _segments_out{};
+    // the segments TCPConnection wants to sent is what sender wants to sent
+    // so _segments_out is a reference of _sender.segments_out
+    std::queue<TCPSegment> &_segments_out{_sender.segments_out()};
 
     //! Should the TCPConnection stay active (and keep ACKing)
     //! for 10 * _cfg.rt_timeout milliseconds after both streams have ended,
     //! in case the remote TCPConnection doesn't know we've received its whole stream?
     bool _linger_after_streams_finish{true};
+    
+    size_t _time_since_last_segment_received{0};
 
+    bool rst{false};
+    bool _linger_timeout{false};
+    bool &_outbound_fully_acked{_sender.fully_acked()};
+    void fill_ack_win(); 
+    void rst_happen(bool is_sending);
+    bool syn_received{false};
+    bool syn_sent{false};
   public:
     //! \name "Input" interface for the writer
     //!@{

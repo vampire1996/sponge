@@ -71,3 +71,20 @@ size_t TCPReceiver::window_size() const {
         //	return size==0?1:size; 
 }
 
+bool TCPReceiver::in_listen()
+{
+  // waiting for stream to begin(listening for SYN)
+  return !ackno().has_value();
+}
+
+bool TCPReceiver::in_syn_recv()
+{
+  //stream_stared
+  return ackno().has_value() && !stream_out().input_ended();
+}
+
+bool TCPReceiver::in_fin_recv()
+{
+  // stream finished
+  return stream_out().input_ended();
+}

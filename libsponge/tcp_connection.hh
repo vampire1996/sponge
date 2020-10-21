@@ -25,14 +25,12 @@ class TCPConnection {
     bool _linger_after_streams_finish{true};
     
     size_t _time_since_last_segment_received{0};
-
-    bool rst{false};
-    bool _linger_timeout{false};
-    bool &_outbound_fully_acked{_sender.fully_acked()};
-    void fill_ack_win(); 
+    bool _active{true};
+    void fill_and_update(bool send_syn); 
+    void clean_shutdown();
     void rst_happen(bool is_sending);
-    bool syn_received{false};
-    bool syn_sent{false};
+    std::string sender_state();
+    std::string receiver_state();
   public:
     //! \name "Input" interface for the writer
     //!@{
@@ -106,6 +104,7 @@ class TCPConnection {
     TCPConnection(const TCPConnection &other) = delete;
     TCPConnection &operator=(const TCPConnection &other) = delete;
     //!@}
+
 };
 
 #endif  // SPONGE_LIBSPONGE_TCP_FACTORED_HH

@@ -175,3 +175,34 @@ void TCPSender::send_empty_segment() {
       segment.header()=header;
       _segments_out.push(segment);
 }
+
+bool TCPSender::in_closed()
+{
+   // waiting for stream to begin(no SYN sent)	
+   return next_seqno_absolute()==0;
+}
+
+bool TCPSender::in_syn_sent()
+{
+  //stream started but nothing acknowledegd
+  return next_seqno_absolute()>0 && next_seqno_absolute()== bytes_in_flight();
+}
+
+bool TCPSender::in_syn_acked()
+{
+  // return stream ongoing 
+  // or stream has reached EOF,but fin flag hasn't been sent yet
+  return (next_seqno_absolute()>bytes_in_flight() && !stream_in().eof()) || (stream_in().eof()&& next_seqno_absolute()<stream_in().bytes_written()+2) ;
+}
+
+bool TCPSender::in_fin_sent()
+{
+  // stream finished(FIN sent) but not fully acked	
+  return  stream_in().eof() && next_seqno_absolute()==(stream_in().bytes_written()+2) && bytes_in_flight()>0;
+}
+
+bool TCPSender::in_fin_acked()
+{
+  // stream finished and fully acked
+  return stream_in().eof() && next_seqno_absolute() ==( stream_in().bytes_written()+2) && bytes_in_flight()==0;
+}

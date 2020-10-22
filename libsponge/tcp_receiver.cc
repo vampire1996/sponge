@@ -12,8 +12,8 @@ using namespace std;
 
 bool TCPReceiver::segment_received(const TCPSegment &seg) {
     bool eof=false;
-    std::string data=""; 
-    std::string_view sv=seg.payload().str();    
+    std::string data=seg.payload().copy(); 
+   // std::string_view sv=seg.payload().str();    
     uint64_t index=0;
     uint64_t checkpoint=_reassembler.stream_out().bytes_written();
     WrappingInt32 seq_number=seg.header().seqno;
@@ -25,20 +25,19 @@ bool TCPReceiver::segment_received(const TCPSegment &seg) {
     // if ISN hasn't been set yet,a segment is acceptable if(and only if) it has the SYN bit set
     if(!syn_received && !syn_flag) return false;
     if(syn_flag)
-    {
-       flag=true;	    
+    {	    	    
        syn_received=true;	    
        isn=seq_number; 
        //isn+1 is because that isn is not wrote to byte stream
        index=unwrap(isn+1,isn,0);
-       //if(sv.length()>0)sv=sv.substr(1);
+       flag=true;
     }	    
     else
     {
        uint64_t n=_reassembler.stream_out().bytes_written();
        index=unwrap(seq_number,isn,checkpoint);
        //if payload overlaps some part of the window,flag=true or the payload is empty-- an ack 
-       if(!(index-1>=n+window_size() || index-1+sv.length()<=n) ) flag=true;
+       if(!(index-1>=n+window_size() || index-1+data.length()<=n) ) flag=true;
     }
     if(fin_flag)
     {
@@ -48,8 +47,6 @@ bool TCPReceiver::segment_received(const TCPSegment &seg) {
        // if(sv.length()>0)sv=sv.substr(0,sv.length()-1);
     }
     // data=sv.data();//when sv.data() meet null,the return string ends so it is not right 
-    for(uint64_t i=0;i<sv.length();i++) data+=sv[i];
-   // cout<<data<<" "<<sv.length()<<endl;
     _reassembler.push_substring(data,index-1,eof);
     return flag;
 }

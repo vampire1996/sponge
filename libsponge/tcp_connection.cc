@@ -38,17 +38,19 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
    // a segment is accetable only if syn is received
    if(_receiver.in_listen() && !seg.header().syn) return;
 
-
+   if(_sender.in_syn_sent() && seg.header().ack && seg.payload().size()>0) return;
+   bool send_empty=false; 
+  
    // update ackno and win_size of sender   
-   if(seg.header().ack && !_sender.ack_received(seg.header().ackno,seg.header().win)) // sender cares about segment's ackno
+   if( seg.header().ack && !_sender.ack_received(seg.header().ackno,seg.header().win)) // sender cares about segment's ackno
    {
    	      
       // tepSender says that an ackno was invalid
       //make sure a segment is sent with updated window size and ackno
       //dont ack ack
-      if(_sender.segments_out().empty() && seg.payload().size()!=0 )
+      if(seg.payload().size()!=0 )
       {
-         _sender.send_empty_segment();
+	 send_empty=true;
       }
 
    }
@@ -59,9 +61,10 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
       //received segment did not overlap the window and was unacceptable
       //make sure a segment is sent with updated window size and ackno
       //dont ack ack
-      if(_sender.segments_out().empty() && seg.payload().size()!=0 )
+      
+      if(seg.payload().size()!=0 )
       {
-         _sender.send_empty_segment();
+	 send_empty=true;
       }
 
    }
@@ -78,14 +81,20 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
       }
       // if fin is not fully acked or segment's header fin =true
       // must sent a reply segment
-      if(_sender.segments_out().empty() &&  ( !_sender.in_fin_acked() || seg.header().fin) )
+      /*
+      if(!_sender.in_fin_acked() || seg.header().fin )
       {
-         _sender.send_empty_segment();
-      }
+        // _sender.send_empty_segment();
+	 send_empty=true;
+      }*/
    }
+   if(seg.length_in_sequence_space()>0)
+   {
+      send_empty=true;
+   }
+   if(send_empty && _sender.segments_out().empty() && _receiver.ackno().has_value()) _sender.send_empty_segment();
   
-  
-   fill_and_update(false);
+   fill_and_update(false,false);
  
    // cerr<<"after segment_received "<<"rst: "<<seg.header().rst<<" syn: "<<seg.header().syn<<" fin: "<<seg.header().fin<<" "<<sender_state()<<" "<<receiver_state()<<"\n";	
 
@@ -109,7 +118,7 @@ bool TCPConnection::active() const {
 size_t TCPConnection::write(const string &data) {
     size_t len=_sender.stream_in().write(data);
     //cerr<<"write "<<len<<"\n";
-    fill_and_update(false);
+    fill_and_update(false,false);
     return len;
 }
 
@@ -122,20 +131,21 @@ void TCPConnection::tick(const size_t ms_since_last_tick) {
     if(_sender.consecutive_retransmissions()>TCPConfig::MAX_RETX_ATTEMPTS)
     {
         rst_happen(true);
+	//return;
     }
-    fill_and_update(false); // certain segments may need to be resent if timeout
+    fill_and_update(false,false); // certain segments may need to be resent if timeout
 }
 
 void TCPConnection::end_input_stream() {
    _sender.stream_in().end_input();
-   fill_and_update(false);
+   fill_and_update(false,false);
 
 }
 
 void TCPConnection::connect() {
   // cerr<<"connect\n";
   // send a segment with ack
-  fill_and_update(true);
+  fill_and_update(true,false);
  
 }
 
@@ -153,32 +163,39 @@ TCPConnection::~TCPConnection() {
 }
 
 // fill the window and  update the state
-void TCPConnection::fill_and_update(bool send_syn)
+void TCPConnection::fill_and_update(bool send_syn,bool send_rst)
 {
    // only when sending a syn or  _receiver has received a syn,can we fill the window	
    if(send_syn || !_receiver.in_listen()) _sender.fill_window();
   //if there are segemnts to be sent and receiver's ackno is not null
-  if(!_sender.segments_out().empty() && _receiver.ackno().has_value())
+  if(!_sender.segments_out().empty())
    {
      int size=_sender.segments_out().size();
      TCPSegment seg=_sender.segments_out().front();	
-     WrappingInt32 value=_receiver.ackno().value();
-     uint16_t win_size=_receiver.window_size()>numeric_limits<char16_t>::max()?numeric_limits<char16_t>::max() :_receiver.window_size();
-     // if ackno han window size is the latest,no need to update
-     if(! (seg.header().ack && seg.header().ackno==value && seg.header().win==win_size) ) {
+     WrappingInt32 value(0);
+     if(_receiver.ackno().has_value())value=_receiver.ackno().value();
+    // uint16_t win_size=_receiver.window_size()>numeric_limits<char16_t>::max()?numeric_limits<char16_t>::max() :_receiver.window_size();
+    uint16_t win_size=_receiver.window_size(); 
+    // if ackno han window size is the latest,no need to update
+    // if(! (seg.header().ack && seg.header().ackno==value && seg.header().win==win_size) ) {
      for(int i=0;i<size;i++)
      {      
      seg=_sender.segments_out().front();	     
-     seg.header().ack=true;	     
-     seg.header().ackno=value;
+     if(_receiver.ackno().has_value())
+     {
+       seg.header().ack=true;	     
+       seg.header().ackno=value;
       
-     //header().win is uint_16 but _receiver.window_size() is size_t
-     //so the biggest window size is numeric_limits<char16_t>
-     seg.header().win=win_size;
+       //header().win is uint_16 but _receiver.window_size() is size_t
+       //so the biggest window size is numeric_limits<char16_t>
+        seg.header().win=win_size;
+     }
+     // rst flag need to be set after sender.fill_window() so it can be retransmissed
+     if(send_rst) seg.header().rst=true;
      _sender.segments_out().push(seg);
      _sender.segments_out().pop();
-      }
      }
+     
    }
    
    // check whether clean shutdon is needed
@@ -194,25 +211,40 @@ void TCPConnection::rst_happen(bool is_sending)
    _receiver.stream_out().set_error();
    if(is_sending) // if sending a rst
    {
-      //clear all outbound segements	   
-      while(!_sender.segments_out().empty()) _sender.segments_out().pop();
-      //generate an empty segemnt
-      _sender.send_empty_segment();
-      // set rst
-      _sender.segments_out().front().header().rst=true;
+      if(_sender.segments_out().empty())_sender.send_empty_segment();	   
+      fill_and_update(false,true);
    }
 }
 
 void TCPConnection::clean_shutdown()
 {
    // fin received from remote peer before TCPConnection has reached EOF on its outbound stream  ,no need to linger after stream finish,so set it to false
-   if(_receiver.in_fin_recv() && !_sender.stream_in().input_ended())
+   if(_receiver.in_fin_recv() && !_sender.stream_in().eof())
    {
        _linger_after_streams_finish=false;
    }
-   if(_sender.in_fin_acked() && _time_since_last_segment_received>=10*_cfg.rt_timeout) _active=false;
-   if(!_linger_after_streams_finish && _sender.in_fin_acked() ) _active=false;
+   // only when 
+   // (1) inbound has been fully assenbled and has ended
+   // (2)outbound stream has been fully acked 
+   //  we need to check clean shutdown
+   if(_sender.in_fin_acked() && _receiver.stream_out().input_ended())
+   {
+      if(!_linger_after_streams_finish || _time_since_last_segment_received>=10*_cfg.rt_timeout) _active=false;
+   }
 }
+
+/*
+void TCPConnection::clean_shutdown() {
+    if (_receiver.stream_out().input_ended() && !(_sender.stream_in().eof())) {
+        _linger_after_streams_finish = false;
+    }
+    if (_sender.stream_in().eof() && _sender.bytes_in_flight() == 0 && _receiver.stream_out().input_ended()) {
+        if (!_linger_after_streams_finish || time_since_last_segment_received() >= 10 * _cfg.rt_timeout) {
+            _active = false;
+        }
+    }
+}
+*/
 
 std::string TCPConnection::sender_state()
 {

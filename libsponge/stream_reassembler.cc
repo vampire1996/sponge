@@ -70,7 +70,7 @@ data:
 	 unassembled_bytes_cnt--;
       }
       _output.write(s);
-      if(data=="c"&&index==2) std::cout<<s<<" "<<i<<" "<<j<<" "<<_output.bytes_written()<<" "<<n1<<" "<<n2<<" "<<state[3]<<" "<<bytes[j]<<std::endl;
+     // if(data=="c"&&index==2) std::cout<<s<<" "<<i<<" "<<j<<" "<<_output.bytes_written()<<" "<<n1<<" "<<n2<<" "<<state[3]<<" "<<bytes[j]<<std::endl;
       if(eof) input_end_index=index+data.length();
       if(i==input_end_index)_output.end_input();
     }

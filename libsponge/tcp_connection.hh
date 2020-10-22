@@ -26,7 +26,7 @@ class TCPConnection {
     
     size_t _time_since_last_segment_received{0};
     bool _active{true};
-    void fill_and_update(bool send_syn); 
+    void fill_and_update(bool send_syn,bool send_rst); 
     void clean_shutdown();
     void rst_happen(bool is_sending);
     std::string sender_state();
